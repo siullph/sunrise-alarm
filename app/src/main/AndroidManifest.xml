@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
         android:allowBackup="true"
@@ -30,13 +31,23 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".ScreenSunriseActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.siullph.sunrisealarm.screen"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.SunriseAlarm.Screen" />
+
         <service
             android:name=".SunriseService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Gradually brightens the flashlight as a light-only wake-up alarm" />
+                android:value="Gradually brightens the flashlight or screen as a light-only wake-up alarm" />
         </service>
 
         <receiver

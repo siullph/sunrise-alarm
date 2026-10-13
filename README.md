@@ -1,7 +1,7 @@
 # Sunrise Alarm
 
-An Android app that wakes you with light only: the phone's rear flashlight starts at its
-dimmest level and brightens until your wake-up time, like a sunrise. No sound.
+An Android app that wakes you with light only: the phone's rear flashlight or its screen
+starts at its dimmest level and brightens until your wake-up time, like a sunrise. No sound.
 
 ## Features
 
@@ -11,8 +11,13 @@ dimmest level and brightens until your wake-up time, like a sunrise. No sound.
   phone alarm is next and re-plans whenever that changes.
 - **Sunrise-only alarms.** Create alarms in the app with a wake-up time, a fade duration
   (5 to 60 minutes) and optional repeat days.
-- **Test** runs a 30-second sunrise so you can see it work; **Stop** (in the app or the
-  notification) switches the light off.
+- **Flash or screen, per alarm.** Each sunrise uses either the rear flashlight or the screen.
+  The screen light opens full screen (over the lock screen), fades from black to a color you
+  pick, and raises the screen brightness along with it. Presets: Sunrise (warm orange),
+  White and pure Blue, or any color from the Custom picker. Tap the screen to show
+  **Stop sunrise**; Back also stops it.
+- **Test this light** runs a 30-second sunrise with that alarm's light and color; **Stop** (in
+  the app or the notification) switches the light off.
 - After the wake-up time the light stays at full brightness for 30 minutes, then turns off.
 
 ## Limitations
@@ -22,6 +27,11 @@ dimmest level and brightens until your wake-up time, like a sunrise. No sound.
   attaches to the next upcoming phone alarm.
 - Gradual brightening needs Android 13+ and a flashlight that supports brightness levels.
   On other phones the flashlight turns on at the start of the fade.
+- The screen light opens through a full-screen notification, so notifications must be allowed.
+  On Android 14+ the app also needs "full-screen notifications" allowed (the app prompts).
+  If the phone is unlocked and in use when a screen sunrise starts, Android shows a
+  notification instead; tap it to open the light.
+- A night-light / eye-comfort filter scheduled for that time will tint the screen color.
 
 ## Install
 
