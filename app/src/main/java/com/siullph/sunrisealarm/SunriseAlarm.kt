@@ -11,6 +11,7 @@ import org.json.JSONObject
  * @param lastFiredWake wake-up time (epoch millis) of the most recent sunrise this
  *   alarm started, so rescheduling never picks the same morning twice.
  * @param color ARGB color the screen fades up to when [source] is the screen.
+ * @param boost let the screen go past its normal maximum toward the display's peak.
  */
 data class SunriseAlarm(
     val id: Int,
@@ -22,6 +23,7 @@ data class SunriseAlarm(
     val lastFiredWake: Long = 0L,
     val source: LightSource = LightSource.FLASH,
     val color: Int = ScreenColors.DEFAULT,
+    val boost: Boolean = true,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -33,6 +35,7 @@ data class SunriseAlarm(
         .put("lastFiredWake", lastFiredWake)
         .put("source", source.name)
         .put("color", color)
+        .put("boost", boost)
 
     companion object {
         fun fromJson(o: JSONObject): SunriseAlarm {
@@ -47,6 +50,7 @@ data class SunriseAlarm(
                 lastFiredWake = o.optLong("lastFiredWake", 0L),
                 source = LightSource.parse(o.optString("source")),
                 color = o.optInt("color", ScreenColors.DEFAULT),
+                boost = o.optBoolean("boost", true),
             )
         }
     }

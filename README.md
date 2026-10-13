@@ -12,13 +12,29 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
 - **Sunrise-only alarms.** Create alarms in the app with a wake-up time, a fade duration
   (5 to 60 minutes) and optional repeat days.
 - **Flash or screen, per alarm.** Each sunrise uses either the rear flashlight or the screen.
-  The screen light opens full screen (over the lock screen), fades from black to a color you
-  pick, and raises the screen brightness along with it. Presets: Sunrise (warm orange),
-  White and pure Blue, or any color from the Custom picker. Tap the screen to show
-  **Stop sunrise**; Back also stops it.
-- **Test this light** runs a 30-second sunrise with that alarm's light and color; **Stop** (in
-  the app or the notification) switches the light off.
+  The screen light fades from black to the alarm's color, updated every display frame along
+  a perceptual curve: first the color rises at the lowest backlight, then the backlight rises
+  exponentially (which the eye reads as even steps).
+- **Colors.** White is built in. Save up to 10 colors of your own, each with a name, from a
+  color wheel or a color temperature (Kelvin) slider. The ⋮ menu in the color editor has
+  **Fine-tune color** (exact red, green and blue) and **Delete color**. Long-press a color to
+  edit it.
+- **Peak brightness** (per alarm, screen only). At the end of the fade the light pushes past
+  the normal maximum into the display's HDR headroom (Android 14+), toward the brightness the
+  phone uses in direct sunlight. How far it goes, and for how long, is up to the phone.
+- **Pick up to end it.** The gyroscope (or the accelerometer on phones without one) notices
+  the phone being picked up, and the light fades out in under half a second. Tapping the light
+  does the same.
+- **Overlay over the alarm.** With "display over other apps" allowed, the screen light is drawn
+  over everything, including the Clock app's alarm screen. When it fades away, the Clock app's
+  dismiss / snooze slider is underneath. Sunrise-only alarms have their own slider: right to
+  dismiss, left to snooze (10 minutes; the snoozed alarm comes back dark, without the light).
+- **Snoozes never light up.** A phone alarm within an hour of the one a sunrise just ran for
+  (a snooze, or a backup alarm) doesn't start another sunrise.
+- **Test this light** runs a 30-second sunrise with that alarm's light and color; **Stop light**
+  (in the app or the notification) switches the light off.
 - After the wake-up time the light stays at full brightness for 30 minutes, then turns off.
+- Material You: colors follow the wallpaper on Android 12+.
 
 ## Limitations
 
@@ -32,11 +48,18 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   If the phone is unlocked and in use when a screen sunrise starts, Android shows a
   notification instead; tap it to open the light.
 - A night-light / eye-comfort filter scheduled for that time will tint the screen color.
+- Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
+  HDR headroom instead, which reaches the same panel range on many phones but not all, and the
+  phone may dim it again as it warms up.
+- Android doesn't say whether the next alarm is a snooze, so the app infers it from timing.
+- Without "display over other apps", the light lives in the app's own full-screen window, and
+  the Clock app's alarm screen covers it at the wake-up time.
 
 ## Install
 
 Every push to `main` builds a debug APK on GitHub Actions and publishes it as the
-**Latest debug build** release (also on the `apk` branch). Download
+**Latest debug build** release (also on the `apk` branch). Pull request builds are pushed to
+an `apk-pr-<number>` branch. Download
 `sunrise-alarm-debug.apk` on your phone and open it; allow installing from that source when asked.
 
 ## Build locally

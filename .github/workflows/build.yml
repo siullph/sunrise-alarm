@@ -54,3 +54,16 @@ jobs:
           git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
             commit -q -m "Debug APK for ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" apk
+
+      - name: Publish a pull request's build to its apk-pr-<number> branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          mkdir apk-pr-out
+          cp app/build/outputs/apk/debug/app-debug.apk apk-pr-out/sunrise-alarm-debug.apk
+          cd apk-pr-out
+          git init -q -b apk-pr
+          git add sunrise-alarm-debug.apk
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -q -m "Debug APK for PR #${{ github.event.pull_request.number }} at ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" \
+            "apk-pr:apk-pr-${{ github.event.pull_request.number }}"
