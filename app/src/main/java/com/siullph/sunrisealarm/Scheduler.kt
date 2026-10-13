@@ -14,6 +14,19 @@ data class PhoneAlarm(val wakeAt: Long, val appLabel: String?)
 object Scheduler {
     const val EXTRA_ALARM_ID = "alarm_id"
     const val EXTRA_WAKE_AT = "wake_at"
+    const val EXTRA_SNOOZE = "snooze"
+
+    /** How long this app's own alarm screen stays away after Snooze. */
+    const val SNOOZE_MS = 10 * 60_000L
+
+    /** Request codes for snoozes are offset so they never replace an alarm's own sunrise. */
+    private const val SNOOZE_REQUEST_BASE = 1_000_000
+
+    /**
+     * A phone alarm this soon after the one a sunrise just ran for is treated as a snooze
+     * (or a backup alarm) and gets no sunrise of its own: the light is already up.
+     */
+    private const val SNOOZE_WINDOW_MS = 60 * 60_000L
 
     /** Request code / alarm id used for the sunrise tied to the phone's next alarm. */
     const val LINKED_ID = 0
@@ -73,13 +86,42 @@ object Scheduler {
         val phoneAlarm = nextPhoneAlarm(context)
         if (!store.linkedEnabled || phoneAlarm == null ||
             phoneAlarm.wakeAt <= System.currentTimeMillis() ||
-            phoneAlarm.wakeAt == store.linkedLastFiredWake
+            phoneAlarm.wakeAt == store.linkedLastFiredWake ||
+            isSnooze(phoneAlarm.wakeAt, store.linkedLastFiredWake)
         ) {
             cancel(context, LINKED_ID)
             return
         }
         schedule(context, LINKED_ID, phoneAlarm.wakeAt, store.linkedFadeMinutes)
     }
+
+    /**
+     * Android doesn't say whether the next alarm is a snooze, so this infers it. A snoozed
+     * alarm comes back minutes after the alarm it snoozed, which a sunrise just ran for.
+     */
+    fun isSnooze(wakeAt: Long, lastSunriseWake: Long): Boolean =
+        lastSunriseWake > 0L && wakeAt - lastSunriseWake in 1..SNOOZE_WINDOW_MS
+
+    /** Brings this app's own alarm screen back (dark, no sunrise) after a snooze. */
+    fun scheduleSnooze(context: Context, alarmId: Int) {
+        val at = System.currentTimeMillis() + SNOOZE_MS
+        val intent = Intent(context, AlarmReceiver::class.java)
+            .putExtra(EXTRA_ALARM_ID, alarmId)
+            .putExtra(EXTRA_WAKE_AT, at)
+            .putExtra(EXTRA_SNOOZE, true)
+        val pi = PendingIntent.getBroadcast(
+            context, SNOOZE_REQUEST_BASE + alarmId, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val am = context.getSystemService(AlarmManager::class.java)
+        if (canScheduleExact(context)) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        } else {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        }
+    }
+
+    fun cancelSnooze(context: Context, alarmId: Int) = cancel(context, SNOOZE_REQUEST_BASE + alarmId)
 
     private fun schedule(context: Context, id: Int, wakeAt: Long, fadeMinutes: Int) {
         val am = context.getSystemService(AlarmManager::class.java)
