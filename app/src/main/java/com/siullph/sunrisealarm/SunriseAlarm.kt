@@ -10,6 +10,7 @@ import org.json.JSONObject
  *   Empty means the alarm rings once and then switches itself off.
  * @param lastFiredWake wake-up time (epoch millis) of the most recent sunrise this
  *   alarm started, so rescheduling never picks the same morning twice.
+ * @param color ARGB color the screen fades up to when [source] is the screen.
  */
 data class SunriseAlarm(
     val id: Int,
@@ -19,6 +20,8 @@ data class SunriseAlarm(
     val days: Set<Int> = emptySet(),
     val enabled: Boolean = true,
     val lastFiredWake: Long = 0L,
+    val source: LightSource = LightSource.FLASH,
+    val color: Int = ScreenColors.DEFAULT,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id)
@@ -28,6 +31,8 @@ data class SunriseAlarm(
         .put("days", JSONArray(days.sorted()))
         .put("enabled", enabled)
         .put("lastFiredWake", lastFiredWake)
+        .put("source", source.name)
+        .put("color", color)
 
     companion object {
         fun fromJson(o: JSONObject): SunriseAlarm {
@@ -40,6 +45,8 @@ data class SunriseAlarm(
                 days = (0 until daysJson.length()).map { daysJson.getInt(it) }.toSet(),
                 enabled = o.optBoolean("enabled", true),
                 lastFiredWake = o.optLong("lastFiredWake", 0L),
+                source = LightSource.parse(o.optString("source")),
+                color = o.optInt("color", ScreenColors.DEFAULT),
             )
         }
     }

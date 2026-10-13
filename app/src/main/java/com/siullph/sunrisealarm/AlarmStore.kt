@@ -46,6 +46,14 @@ class AlarmStore(context: Context) {
         get() = prefs.getInt(KEY_LINKED_FADE, 30)
         set(value) = prefs.edit().putInt(KEY_LINKED_FADE, value).apply()
 
+    var linkedSource: LightSource
+        get() = LightSource.parse(prefs.getString(KEY_LINKED_SOURCE, null))
+        set(value) = prefs.edit().putString(KEY_LINKED_SOURCE, value.name).apply()
+
+    var linkedColor: Int
+        get() = prefs.getInt(KEY_LINKED_COLOR, ScreenColors.DEFAULT)
+        set(value) = prefs.edit().putInt(KEY_LINKED_COLOR, value).apply()
+
     /** Wake-up time of the phone alarm the last linked sunrise ran for. */
     var linkedLastFiredWake: Long
         get() = prefs.getLong(KEY_LINKED_LAST_FIRED, 0L)
@@ -56,6 +64,8 @@ class AlarmStore(context: Context) {
         const val KEY_NEXT_ID = "next_id"
         const val KEY_LINKED_ENABLED = "linked_enabled"
         const val KEY_LINKED_FADE = "linked_fade_minutes"
+        const val KEY_LINKED_SOURCE = "linked_source"
+        const val KEY_LINKED_COLOR = "linked_color"
         const val KEY_LINKED_LAST_FIRED = "linked_last_fired_wake"
     }
 }
