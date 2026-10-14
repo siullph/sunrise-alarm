@@ -240,6 +240,29 @@ object DisplayFilters {
         }
     }
 
+    /** [restore], unless a screen sunrise is still lit in this process. */
+    fun restoreIfIdle(context: Context, onDone: () -> Unit = {}) {
+        val s = ScreenSunrise.current.value
+        if (s == null || !s.lightOn) restore(context, onDone) else onDone()
+    }
+
+    /**
+     * Shifts [color] so it looks like itself through a Night Light at [kelvin]: channels Night
+     * Light dims are raised relative to the others. Nothing can be raised past full, so the
+     * result is darker, and a pure blue only gets back its hue, not its brightness.
+     */
+    fun counterTint(color: Int, kelvin: Int): Int {
+        val tint = ScreenColors.fromKelvin(kelvin)
+        val r = Color.red(color) / Color.red(tint).coerceAtLeast(1).toFloat()
+        val g = Color.green(color) / Color.green(tint).coerceAtLeast(1).toFloat()
+        val b = Color.blue(color) / Color.blue(tint).coerceAtLeast(1).toFloat()
+        val top = maxOf(r, g, b)
+        if (top <= 0f) return color
+        fun c(v: Float) = (v / top * 255f).roundToInt().coerceIn(0, 255)
+        return Color.rgb(c(r), c(g), c(b))
+    }
+
+
     private fun scheduleBackup(context: Context, until: Long) {
         val am = context.getSystemService(AlarmManager::class.java)
         am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, until, backupIntent(context))
