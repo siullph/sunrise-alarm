@@ -34,6 +34,23 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
 - **Test this light** runs a 30-second sunrise with that alarm's light and color; **Stop light**
   (in the app or the notification) switches the light off.
 - After the wake-up time the light stays at full brightness for 30 minutes, then turns off.
+- **Night Light and grayscale don't touch the light.** While a screen sunrise is lit, the app
+  switches off Night Light (and Samsung's Eye comfort shield) and grayscale, then puts back
+  whichever were on once the light goes out, following the Night Light schedule if there is
+  one. This needs a one-time permission granted from a computer (the app shows the command):
+
+  ```sh
+  adb shell pm grant com.siullph.sunrisealarm android.permission.WRITE_SECURE_SETTINGS
+  ```
+
+  With [Shizuku](https://shizuku.rikka.app/) running and allowed, the app can grant this
+  itself ("Allow with Shizuku"), with no computer. Without it, the app shifts the color to
+  cancel Night Light's tint (the hue comes back, but not full brightness).
+- **Bedtime mode grayscale** (Pixel and other Android 15+ phones) isn't a setting: the system
+  lowers the display's saturation, which only the adb shell can raise again. With Shizuku
+  running and allowed, the app sets full color for the sunrise and puts grayscale back
+  afterwards if Bedtime mode is still on. Shizuku can be started with Wireless debugging on the
+  phone itself, and has to be started again after each restart.
 - Material You: colors follow the wallpaper on Android 12+.
 
 ## Limitations
@@ -47,7 +64,9 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   On Android 14+ the app also needs "full-screen notifications" allowed (the app prompts).
   If the phone is unlocked and in use when a screen sunrise starts, Android shows a
   notification instead; tap it to open the light.
-- A night-light / eye-comfort filter scheduled for that time will tint the screen color.
+- Without the adb permission above, Night Light dims the screen color. Without Shizuku,
+  Bedtime mode's grayscale drains it. Samsung's own Sleep mode grayscale is covered only if One
+  UI applies it through the same display saturation as Android's modes; that's untested.
 - Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
   HDR headroom instead, which reaches the same panel range on many phones but not all, and the
   phone may dim it again as it warms up.

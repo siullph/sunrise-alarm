@@ -86,7 +86,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,9 +98,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.siullph.sunrisealarm.AlarmStore
 import com.siullph.sunrisealarm.ColorSlot
+import com.siullph.sunrisealarm.DisplayFilters
 import com.siullph.sunrisealarm.LightSource
 import com.siullph.sunrisealarm.Scheduler
 import com.siullph.sunrisealarm.ScreenColors
+import com.siullph.sunrisealarm.ShizukuShell
 import com.siullph.sunrisealarm.SunriseAlarm
 import com.siullph.sunrisealarm.SunriseService
 import com.siullph.sunrisealarm.Torch
@@ -164,6 +169,8 @@ fun MainScreen(refresh: Int, onChanged: () -> Unit) {
             context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
     }
     val canOverlay = remember(refresh) { Settings.canDrawOverlays(context) }
+    val canOverrideFilters = remember(refresh) { DisplayFilters.canOverride(context) }
+    val filters = remember(refresh) { DisplayFilters.status(context) }
     val usesScreen = remember(refresh) {
         store.linkedSource == LightSource.SCREEN || alarms.any { it.source == LightSource.SCREEN }
     }
@@ -305,6 +312,12 @@ fun MainScreen(refresh: Int, onChanged: () -> Unit) {
                 }
             }
 
+            if (usesScreen) {
+                item(key = "filters") {
+                    FiltersCard(canOverrideFilters, filters, refresh, onChanged, Modifier.animateItem())
+                }
+            }
+
             item(key = "linked-title") { SectionTitle("Phone alarm", Modifier.animateItem()) }
             item(key = "linked") {
                 LinkedAlarmCard(
@@ -406,6 +419,138 @@ private fun Notice(
             if (action != null) TextButton(onClick = onAction) { Text(action) }
         }
     }
+}
+
+/**
+ * Night Light and grayscale: what the app can switch off during a screen sunrise, and the
+ * one-time setup for the rest.
+ */
+@Composable
+private fun FiltersCard(
+    canOverride: Boolean,
+    status: DisplayFilters.Status,
+    refresh: Int,
+    onChanged: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val shizukuInstalled = remember(refresh) { ShizukuShell.installed(context.packageManager) }
+    val shizukuRunning = remember(refresh) { ShizukuShell.running() }
+    val shizukuReady = remember(refresh) { ShizukuShell.ready() }
+    SectionCard(modifier) {
+        Text("Night Light and grayscale", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        if (canOverride) {
+            FilterText(
+                "Night Light, Eye comfort shield and accessibility grayscale are switched off " +
+                    "while a screen sunrise is lit, then put back once the light goes out.",
+            )
+        } else {
+            FilterText(
+                "So Night Light's yellow tint doesn't change the light, the app needs a " +
+                    "permission Android only grants through adb." +
+                    if (shizukuReady) "" else " Run this once from a computer with USB debugging on:",
+            )
+            if (shizukuReady) {
+                FilledTonalButton(
+                    onClick = {
+                        DisplayFilters.grantWithShizuku(context) {
+                            ContextCompat.getMainExecutor(context).execute { onChanged() }
+                        }
+                    },
+                    modifier = Modifier.padding(top = 8.dp),
+                ) { Text("Allow with Shizuku") }
+            } else {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    DisplayFilters.GRANT_COMMAND,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .padding(12.dp),
+                )
+                TextButton(onClick = { clipboard.setText(AnnotatedString(DisplayFilters.GRANT_COMMAND)) }) {
+                    Text("Copy command")
+                }
+            }
+            FilterText(
+                "Until then the app shifts the color to cancel Night Light's tint, which brings " +
+                    "back the hue but not full brightness (blue suffers most).",
+                small = true,
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Text("Bedtime mode grayscale", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        when {
+            shizukuReady -> FilterText(
+                "Lifted through Shizuku while a screen sunrise is lit, and put back afterwards " +
+                    "if Bedtime mode is still on.",
+            )
+            shizukuRunning -> {
+                FilterText("Shizuku is running. Allow Sunrise Alarm to use it.")
+                FilledTonalButton(
+                    onClick = { ShizukuShell.requestPermission() },
+                    modifier = Modifier.padding(top = 8.dp),
+                ) { Text("Allow") }
+            }
+            else -> {
+                FilterText(
+                    "Bedtime mode's grayscale isn't a setting apps can change. The free Shizuku " +
+                        "app can lift it: " +
+                        (if (shizukuInstalled) "open it and " else "install it, ") +
+                        "start it with Wireless debugging (no computer needed), then come back " +
+                        "here to allow it. Shizuku has to be started again after the phone restarts.",
+                )
+                FilledTonalButton(
+                    onClick = {
+                        val intent = if (shizukuInstalled) {
+                            context.packageManager.getLaunchIntentForPackage(ShizukuShell.PACKAGE)
+                        } else {
+                            Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://play.google.com/store/apps/details?id=${ShizukuShell.PACKAGE}"),
+                            )
+                        }
+                        intent?.let {
+                            try {
+                                context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } catch (_: Exception) {
+                            }
+                        }
+                    },
+                    modifier = Modifier.padding(top = 8.dp),
+                ) { Text(if (shizukuInstalled) "Open Shizuku" else "Get Shizuku") }
+            }
+        }
+
+        val on = listOfNotNull(
+            "Night Light".takeIf { status.nightLight == true },
+            "Eye comfort shield".takeIf { status.eyeComfort == true },
+            "accessibility grayscale".takeIf { status.grayscale == true },
+        )
+        Spacer(Modifier.height(12.dp))
+        FilterText(
+            if (on.isEmpty()) "On right now: none of the settings above"
+            else "On right now: ${on.joinToString(", ")}",
+            small = true,
+        )
+    }
+}
+
+@Composable
+private fun FilterText(text: String, small: Boolean = false) {
+    Text(
+        text,
+        style = if (small) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = if (small) Modifier.padding(top = 4.dp) else Modifier,
+    )
 }
 
 @Composable
