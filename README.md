@@ -43,8 +43,14 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   adb shell pm grant com.siullph.sunrisealarm android.permission.WRITE_SECURE_SETTINGS
   ```
 
-  Without it, the app shifts the color to cancel Night Light's tint (the hue comes back, but
-  not full brightness), and grayscale stays.
+  With [Shizuku](https://shizuku.rikka.app/) running and allowed, the app can grant this
+  itself ("Allow with Shizuku"), with no computer. Without it, the app shifts the color to
+  cancel Night Light's tint (the hue comes back, but not full brightness).
+- **Bedtime mode grayscale** (Pixel and other Android 15+ phones) isn't a setting: the system
+  lowers the display's saturation, which only the adb shell can raise again. With Shizuku
+  running and allowed, the app sets full color for the sunrise and puts grayscale back
+  afterwards if Bedtime mode is still on. Shizuku can be started with Wireless debugging on the
+  phone itself, and has to be started again after each restart.
 - Material You: colors follow the wallpaper on Android 12+.
 
 ## Limitations
@@ -58,10 +64,9 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   On Android 14+ the app also needs "full-screen notifications" allowed (the app prompts).
   If the phone is unlocked and in use when a screen sunrise starts, Android shows a
   notification instead; tap it to open the light.
-- Without the adb permission above, Night Light dims the screen color and grayscale drains it.
-  On Pixels, Bedtime mode's grayscale may be applied in a way no setting controls (Digital
-  Wellbeing drives the display's saturation directly); the app can only switch off the
-  grayscale that comes from the accessibility color correction setting.
+- Without the adb permission above, Night Light dims the screen color. Without Shizuku,
+  Bedtime mode's grayscale drains it. Samsung's own Sleep mode grayscale is covered only if One
+  UI applies it through the same display saturation as Android's modes; that's untested.
 - Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
   HDR headroom instead, which reaches the same panel range on many phones but not all, and the
   phone may dim it again as it warms up.

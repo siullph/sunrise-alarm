@@ -2,6 +2,7 @@ package com.siullph.sunrisealarm
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,6 +12,7 @@ import android.graphics.Color
 import android.provider.Settings
 import android.util.Log
 import org.json.JSONObject
+import java.util.concurrent.Executors
 import kotlin.math.roundToInt
 
 /**
@@ -24,6 +26,11 @@ import kotlin.math.roundToInt
  * first, so a backup alarm ([RestoreReceiver]) and the next app start can still put it back
  * if the app is killed mid-sunrise. Without it, [suspend] can only shift the color to cancel
  * Night Light's tint; grayscale throws the color away, so nothing drawn can undo it.
+ *
+ * Bedtime mode's grayscale on Android 15+ (Pixel's Modes) isn't a setting at all: the system
+ * drops the display's global saturation to 0. Only the system and the adb shell can change
+ * that, so with [ShizukuShell] ready the app raises it back to full for the sunrise and lowers
+ * it again afterwards if a mode that wants grayscale is still on.
  */
 object DisplayFilters {
     const val GRANT_COMMAND =
@@ -46,6 +53,11 @@ object DisplayFilters {
 
     private const val PREFS = "display_filters"
     private const val KEY_SAVED = "saved"
+    private const val KEY_SATURATION = "saturation"
+    private const val SHIZUKU_WAIT_MS = 8_000L
+
+    /** Shizuku work runs here, one task at a time, so a restore never overtakes a suspend. */
+    private val shell = Executors.newSingleThreadExecutor()
     private const val RESTORE_REQUEST = 2_000_000
 
     /** What is on right now; null where the phone won't let the app read it. */
@@ -74,6 +86,7 @@ object DisplayFilters {
      * Night Light stays on.
      */
     fun suspend(context: Context, color: Int, until: Long): Int {
+        suspendSaturation(context.applicationContext, until)
         val now = status(context)
         if (!canOverride(context)) {
             return if (now.nightLight == true) {
@@ -114,7 +127,8 @@ object DisplayFilters {
     }
 
     /** Puts back every filter [suspend] switched off. Does nothing if none are waiting. */
-    fun restore(context: Context) {
+    fun restore(context: Context, onDone: () -> Unit = {}) {
+        restoreSaturation(context.applicationContext, onDone)
         val saved = loadSaved(context) ?: return
         val cr = context.contentResolver
         saved.optJSONObject("night")?.let { night ->
@@ -145,26 +159,85 @@ object DisplayFilters {
         context.getSystemService(AlarmManager::class.java).cancel(backupIntent(context))
     }
 
-    /** [restore], unless a screen sunrise is still lit in this process. */
-    fun restoreIfIdle(context: Context) {
-        val s = ScreenSunrise.current.value
-        if (s == null || !s.lightOn) restore(context)
+    /** After a reboot the display starts in full color again, so there is nothing to lower. */
+    fun forgetSaturation(context: Context) {
+        prefs(context).edit().remove(KEY_SATURATION).commit()
+    }
+
+    /** Grants WRITE_SECURE_SETTINGS through Shizuku, so Night Light needs no computer either. */
+    fun grantWithShizuku(context: Context, onDone: () -> Unit) {
+        shell.execute {
+            if (ShizukuShell.ready()) {
+                ShizukuShell.exec(
+                    "pm grant ${context.packageName} ${Manifest.permission.WRITE_SECURE_SETTINGS}",
+                )
+            }
+            onDone()
+        }
+    }
+
+    /** If the display is in grayscale, brings its color back for the sunrise (via Shizuku). */
+    private fun suspendSaturation(context: Context, until: Long) {
+        if (!ShizukuShell.installed(context.packageManager)) return
+        shell.execute {
+            if (!ShizukuShell.awaitReady(SHIZUKU_WAIT_MS)) return@execute
+            val grayscale = saturationLowered() ?: return@execute
+            // Already raised by a sunrise this one replaces: keep the note to lower it later.
+            if (!grayscale && !prefs(context).getBoolean(KEY_SATURATION, false)) return@execute
+            prefs(context).edit().putBoolean(KEY_SATURATION, true).commit()
+            scheduleBackup(context, until)
+            ShizukuShell.exec("cmd color_display set-saturation 100")
+        }
     }
 
     /**
-     * Shifts [color] so it looks like itself through a Night Light at [kelvin]: channels Night
-     * Light dims are raised relative to the others. Nothing can be raised past full, so the
-     * result is darker, and a pure blue only gets back its hue, not its brightness.
+     * Lowers the saturation back to grayscale if a mode that wants grayscale is still on. The
+     * phone only applies a mode's grayscale when the mode starts or ends, so if the mode ended
+     * during the sunrise it already asked for full color and there is nothing to put back.
      */
-    fun counterTint(color: Int, kelvin: Int): Int {
-        val tint = ScreenColors.fromKelvin(kelvin)
-        val r = Color.red(color) / Color.red(tint).coerceAtLeast(1).toFloat()
-        val g = Color.green(color) / Color.green(tint).coerceAtLeast(1).toFloat()
-        val b = Color.blue(color) / Color.blue(tint).coerceAtLeast(1).toFloat()
-        val top = maxOf(r, g, b)
-        if (top <= 0f) return color
-        fun c(v: Float) = (v / top * 255f).roundToInt().coerceIn(0, 255)
-        return Color.rgb(c(r), c(g), c(b))
+    private fun restoreSaturation(context: Context, onDone: () -> Unit) {
+        shell.execute {
+            try {
+                if (!prefs(context).getBoolean(KEY_SATURATION, false)) return@execute
+                if (!ShizukuShell.awaitReady(SHIZUKU_WAIT_MS)) return@execute
+                if (grayscaleModeOn(context)) ShizukuShell.exec("cmd color_display set-saturation 0")
+                prefs(context).edit().remove(KEY_SATURATION).commit()
+            } finally {
+                onDone()
+            }
+        }
+    }
+
+    /** True when the display's global saturation is lowered (grayscale); null if unknown. */
+    private fun saturationLowered(): Boolean? {
+        val lines = ShizukuShell.exec("dumpsys color_display")?.lines() ?: return null
+        val at = lines.indexOfFirst { it.trim() == "Global saturation:" }
+        if (at < 0 || at + 1 >= lines.size) return null
+        return lines[at + 1].trim() == "Activated: true"
+    }
+
+    /** Whether a mode that turns the screen grayscale is on right now. */
+    private fun grayscaleModeOn(context: Context): Boolean {
+        val config = ShizukuShell.exec("dumpsys notification")
+            ?.lines()
+            ?.firstOrNull { it.trimStart().startsWith("mConfig=") }
+        // One ZenRule[id=…,state=…,enabled=…,conditionOverride=…,…,deviceEffects=[…],…] per mode.
+        val grayscaleRules = config.orEmpty().split("ZenRule[").drop(1).filter { rule ->
+            rule.substringAfter("deviceEffects=", "").substringBefore("]").contains("grayscale")
+        }
+        if (grayscaleRules.isEmpty()) {
+            // Older Android, another format, or an app applying grayscale itself: it came with
+            // a mode, so keep it while any mode is still silencing the phone.
+            val nm = context.getSystemService(NotificationManager::class.java)
+            return nm.currentInterruptionFilter > NotificationManager.INTERRUPTION_FILTER_ALL
+        }
+        return grayscaleRules.any { rule ->
+            val on = rule.contains("conditionOverride=OVERRIDE_ACTIVATE") ||
+                rule.contains(",state=STATE_TRUE") &&
+                !rule.contains("conditionOverride=OVERRIDE_DEACTIVATE") &&
+                !rule.contains("snoozing=true")
+            rule.contains("enabled=TRUE") && on
+        }
     }
 
     private fun scheduleBackup(context: Context, until: Long) {
@@ -206,6 +279,9 @@ object DisplayFilters {
 
     /** Puts the filters back if the app was killed before the sunrise could. */
     class RestoreReceiver : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = restoreIfIdle(context)
+        override fun onReceive(context: Context, intent: Intent) {
+            val pending = goAsync()
+            restoreIfIdle(context) { pending.finish() }
+        }
     }
 }
