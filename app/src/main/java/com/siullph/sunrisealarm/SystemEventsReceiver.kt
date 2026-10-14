@@ -11,5 +11,7 @@ import android.content.Intent
 class SystemEventsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Scheduler.rescheduleAll(context)
+        // After a reboot, put back any Night Light or grayscale a sunrise switched off.
+        DisplayFilters.restoreIfIdle(context)
     }
 }

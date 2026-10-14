@@ -122,7 +122,9 @@ class SunriseService : Service() {
         holdUntil = wakeAt + holdMs
         if (source == LightSource.SCREEN) {
             val sunrise = ScreenSunrise(
-                color = color,
+                // Night Light and grayscale go off for the sunrise, or the color is
+                // counter-tinted when the app isn't allowed to switch them.
+                color = DisplayFilters.suspend(this, color, until = holdUntil + 60_000L),
                 startAt = startAt,
                 wakeAt = wakeAt,
                 holdUntil = holdUntil,
@@ -184,6 +186,8 @@ class SunriseService : Service() {
         if (!s.lightOn) return
         ScreenSunrise.current.value = s.copy(lightOn = false)
         overlay.fadeOut()
+        // The phone's own filters come back once the light is gone.
+        handler.postDelayed({ DisplayFilters.restore(this) }, LightDriver.FADE_OUT_MS)
         if (!s.alarmScreen) handler.postDelayed(stopRunnable, LightDriver.FADE_OUT_MS + 150L)
     }
 
@@ -283,6 +287,7 @@ class SunriseService : Service() {
         overlay.remove()
         if (currentLevel > 0 || currentLevel == FADING) torch.setLevel(0)
         currentLevel = -1
+        DisplayFilters.restore(this)
     }
 
     private fun stopSunrise() {

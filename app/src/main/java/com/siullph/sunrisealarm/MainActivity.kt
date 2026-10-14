@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
 
     private fun changed() {
         Scheduler.rescheduleAll(this)
+        DisplayFilters.restoreIfIdle(this)
         refresh++
     }
 }
