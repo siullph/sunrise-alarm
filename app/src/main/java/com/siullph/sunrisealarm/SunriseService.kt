@@ -113,8 +113,10 @@ class SunriseService : Service() {
             stopSunrise()
             return START_NOT_STICKY
         }
-        // A new sunrise replaces whatever was running.
-        resetLight()
+        // A new sunrise replaces whatever was running. A screen one keeps the filters off:
+        // putting them back first would make Night Light flash on, and a scheduled Night
+        // Light may not have come back yet when the new sunrise checks what is on.
+        resetLight(restoreFilters = newSource != LightSource.SCREEN)
         source = newSource
         alarmId = newAlarmId
         startAt = now
@@ -281,13 +283,13 @@ class SunriseService : Service() {
     }
 
     /** Switches every light off and forgets the running sunrise, without stopping the service. */
-    private fun resetLight() {
+    private fun resetLight(restoreFilters: Boolean = true) {
         handler.removeCallbacksAndMessages(null)
         pickup.stop()
         overlay.remove()
         if (currentLevel > 0 || currentLevel == FADING) torch.setLevel(0)
         currentLevel = -1
-        DisplayFilters.restore(this)
+        if (restoreFilters) DisplayFilters.restore(this)
     }
 
     private fun stopSunrise() {

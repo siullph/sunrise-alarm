@@ -39,6 +39,21 @@ class Torch(context: Context) {
 
     val dimmable: Boolean get() = maxLevel > 1
 
+    /**
+     * The level the phone's own flashlight (the Quick Settings tile) switches on at, which is
+     * usually well below [maxLevel].
+     */
+    val defaultLevel: Int = run {
+        val id = cameraId
+        if (id == null || !dimmable || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@run maxLevel
+        try {
+            cameraManager.getCameraCharacteristics(id)
+                .get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL) ?: maxLevel
+        } catch (e: Exception) {
+            maxLevel
+        }
+    }
+
     /** Sets brightness: 0 is off, [maxLevel] is full. */
     fun setLevel(level: Int) {
         val id = cameraId ?: return
