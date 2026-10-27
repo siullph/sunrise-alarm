@@ -73,6 +73,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -99,6 +100,7 @@ import androidx.core.content.ContextCompat
 import com.siullph.sunrisealarm.AlarmStore
 import com.siullph.sunrisealarm.ColorSlot
 import com.siullph.sunrisealarm.DisplayFilters
+import com.siullph.sunrisealarm.FlashlightShortcut
 import com.siullph.sunrisealarm.LightSource
 import com.siullph.sunrisealarm.Scheduler
 import com.siullph.sunrisealarm.ScreenColors
@@ -315,6 +317,13 @@ fun MainScreen(refresh: Int, onChanged: () -> Unit) {
             if (usesScreen) {
                 item(key = "filters") {
                     FiltersCard(canOverrideFilters, filters, refresh, onChanged, Modifier.animateItem())
+                }
+            }
+
+            if (torch.available) {
+                item(key = "flashlight-title") { SectionTitle("Flashlight", Modifier.animateItem()) }
+                item(key = "flashlight") {
+                    FlashlightCard(torch, canOverrideFilters, refresh, onChanged, Modifier.animateItem())
                 }
             }
 
@@ -540,6 +549,169 @@ private fun FiltersCard(
             else "On right now: ${on.joinToString(", ")}",
             small = true,
         )
+    }
+}
+
+/**
+ * The volume-buttons flashlight: its switch, the one-time Accessibility setup, and the
+ * brightness it switches on at.
+ */
+@Composable
+private fun FlashlightCard(
+    torch: Torch,
+    canWriteSecure: Boolean,
+    refresh: Int,
+    onChanged: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var enabled by remember(refresh) { mutableStateOf(FlashlightShortcut.enabled(context)) }
+    val serviceOn = remember(refresh) { FlashlightShortcut.serviceOn(context) }
+    var level by remember(refresh) { mutableIntStateOf(FlashlightShortcut.level(context, torch)) }
+    var previewing by remember { mutableStateOf(false) }
+    // The preview never outlives the card, and stops when switched off.
+    DisposableEffect(previewing) {
+        onDispose { if (previewing) torch.setLevel(0) }
+    }
+
+    SectionCard(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Volume buttons flashlight",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = enabled,
+                onCheckedChange = {
+                    enabled = it
+                    FlashlightShortcut.setEnabled(context, it)
+                    if (it) FlashlightShortcut.turnServiceOn(context)
+                    onChanged()
+                },
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        FilterText(
+            "Press volume up and volume down together to switch the flashlight on or off, " +
+                "even with the screen off. Single presses still change the volume.",
+        )
+
+        AnimatedVisibility(
+            visible = enabled && !serviceOn,
+            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+        ) {
+            Column(Modifier.padding(top = 12.dp)) {
+                Text("One more step", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                FilterText(
+                    "Only an accessibility service can see the volume buttons in other apps. " +
+                        "In Accessibility settings, open \"Sunrise Alarm flashlight buttons\" and " +
+                        "switch it on. It watches only those two buttons.",
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    FilterText(
+                        "If Android says it's a restricted setting, open App info, tap ⋮, choose " +
+                            "\"Allow restricted settings\", then try again." +
+                            if (canWriteSecure) "" else " Granting the Night Light permission " +
+                                "(adb or Shizuku) also lets the app switch this on by itself.",
+                        small = true,
+                    )
+                }
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            if (!FlashlightShortcut.turnServiceOn(context)) {
+                                openSettings(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            }
+                            onChanged()
+                        },
+                    ) { Text(if (canWriteSecure) "Switch on" else "Open settings") }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !canWriteSecure) {
+                        TextButton(
+                            onClick = {
+                                openSettings(
+                                    context,
+                                    Intent(
+                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                        Uri.parse("package:${context.packageName}"),
+                                    ),
+                                )
+                            },
+                        ) { Text("App info") }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        if (torch.dimmable) {
+            val percent = level * 100 / torch.maxLevel
+            Text(
+                if (level == torch.maxLevel) "Brightness: full (100%)" else "Brightness: $percent%",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = level.toFloat(),
+                onValueChange = {
+                    level = it.roundToInt().coerceIn(1, torch.maxLevel)
+                    if (previewing) torch.setLevel(level)
+                },
+                onValueChangeFinished = { FlashlightShortcut.setLevel(context, level) },
+                valueRange = 1f..torch.maxLevel.toFloat(),
+            )
+            FilterText(
+                "Your phone's own flashlight switches on at " +
+                    "${torch.defaultLevel * 100 / torch.maxLevel}%. Full is the brightest the " +
+                    "flash can go.",
+                small = true,
+            )
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        previewing = !previewing
+                        if (previewing) torch.setLevel(level)
+                    },
+                ) { Text(if (previewing) "Turn off" else "Try it") }
+                if (level != torch.defaultLevel) {
+                    TextButton(
+                        onClick = {
+                            level = torch.defaultLevel
+                            FlashlightShortcut.setLevel(context, level)
+                            if (previewing) torch.setLevel(level)
+                        },
+                    ) { Text("Phone's default") }
+                }
+                if (level != torch.maxLevel) {
+                    TextButton(
+                        onClick = {
+                            level = torch.maxLevel
+                            FlashlightShortcut.setLevel(context, level)
+                            if (previewing) torch.setLevel(level)
+                        },
+                    ) { Text("Full") }
+                }
+            }
+        } else {
+            FilterText(
+                "This phone's flashlight only switches on or off, so it always comes on at the " +
+                    "phone's one brightness.",
+                small = true,
+            )
+        }
+        FilterText(
+            "With the screen fully off, the shortcut works while nothing is playing sound; " +
+                "during music or a call, wake the screen first.",
+            small = true,
+        )
+    }
+}
+
+private fun openSettings(context: Context, intent: Intent) {
+    try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) {
     }
 }
 

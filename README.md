@@ -51,6 +51,13 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   running and allowed, the app sets full color for the sunrise and puts grayscale back
   afterwards if Bedtime mode is still on. Shizuku can be started with Wireless debugging on the
   phone itself, and has to be started again after each restart.
+- **Volume buttons flashlight.** Turn it on in the Flashlight section, then press volume up
+  and volume down together to switch the flashlight on or off, even with the screen off (a
+  short vibration confirms it). A slider picks the brightness it switches on at, up to the
+  flash's full strength (Android 13+), which is brighter than the level the phone's own
+  flashlight tile uses. Single presses still change the volume. It needs the app's
+  accessibility service ("Sunrise Alarm flashlight buttons"), which watches only the volume
+  buttons; the app switches it on by itself if it already has the Night Light permission.
 - Material You: colors follow the wallpaper on Android 12+.
 
 ## Limitations
@@ -67,6 +74,10 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
 - Without the adb permission above, Night Light dims the screen color. Without Shizuku,
   Bedtime mode's grayscale drains it. Samsung's own Sleep mode grayscale is covered only if One
   UI applies it through the same display saturation as Android's modes; that's untested.
+- With the screen fully off, Android gives the volume buttons to no app, only to whatever is
+  playing media. So the flashlight shortcut holds a silent media session while the screen is
+  off, and only while nothing else is playing; during music or a call, wake the screen first.
+  With the always-on display showing, it works through the accessibility service as usual.
 - Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
   HDR headroom instead, which reaches the same panel range on many phones but not all, and the
   phone may dim it again as it warms up.
