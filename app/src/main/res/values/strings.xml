@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Sunrise Alarm</string>
+    <string name="volume_keys_service_label">Sunrise Alarm flashlight buttons</string>
+    <string name="volume_keys_service_description">Press volume up and volume down together to switch the flashlight on or off, even with the screen off. Sunrise Alarm only watches the two volume buttons and reads nothing on your screen. Single presses still change the volume as usual.</string>
 </resources>

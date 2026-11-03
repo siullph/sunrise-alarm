@@ -51,6 +51,13 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
   running and allowed, the app sets full color for the sunrise and puts grayscale back
   afterwards if Bedtime mode is still on. Shizuku can be started with Wireless debugging on the
   phone itself, and has to be started again after each restart.
+- **Volume buttons flashlight.** Turn it on in the Flashlight section, then press volume up
+  and volume down together to switch the flashlight on or off, even with the screen off (a
+  short vibration confirms it). A slider picks the brightness it switches on at, up to the
+  flash's full strength (Android 13+), which is brighter than the level the phone's own
+  flashlight tile uses. Single presses still change the volume. It needs the app's
+  accessibility service ("Sunrise Alarm flashlight buttons"), which watches only the volume
+  buttons; the app switches it on by itself if it already has the Night Light permission.
 - Material You: colors follow the wallpaper on Android 12+.
 
 ## Limitations
@@ -67,6 +74,12 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
 - Without the adb permission above, Night Light dims the screen color. Without Shizuku,
   Bedtime mode's grayscale drains it. Samsung's own Sleep mode grayscale is covered only if One
   UI applies it through the same display saturation as Android's modes; that's untested.
+- With the screen fully off, Android gives the volume buttons to no app; they only change the
+  media volume while something is playing. So while the screen is off the flashlight shortcut
+  plays silence and watches the volume step up and down, which costs a little battery.
+- Android's own volume-keys accessibility shortcut (hold both volume buttons for TalkBack)
+  keeps the pair from every app while the phone is unlocked. The Flashlight card says when it
+  is set up and turns it off (with the Night Light permission) or links to its setting.
 - Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
   HDR headroom instead, which reaches the same panel range on many phones but not all, and the
   phone may dim it again as it warms up.
