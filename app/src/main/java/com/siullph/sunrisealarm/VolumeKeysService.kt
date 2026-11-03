@@ -7,11 +7,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.camera2.CameraManager
 import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
-import android.media.AudioPlaybackConfiguration
-import android.media.VolumeProvider
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
+import android.media.AudioTrack
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -30,21 +28,21 @@ import kotlin.math.abs
  * ([FlashlightShortcut]).
  *
  * The buttons reach the app two ways, depending on the screen:
- * - Screen on, or the always-on display showing: Android hands the buttons to accessibility
- *   services first ([onKeyEvent]). The first button goes through as usual; the second one,
- *   pressed while the first is held, is kept from the system, and the volume the first one
- *   changed is put back.
- * - Screen fully off: Android gives the buttons to no app, only to the media session that
- *   is playing. So while the screen is off (and nothing else is playing) the app holds a
- *   silent media session whose volume is "remote", and reads the presses from it.
+ * - Screen on (locked or in use), or the always-on display showing: Android hands the buttons
+ *   to accessibility services first ([onKeyEvent]). The first button goes through as usual;
+ *   the second one, pressed while the first is held, is kept from the system, and the volume
+ *   the first one changed is put back. Android's own volume-keys accessibility shortcut
+ *   swallows the pair before any app sees it, so that shortcut has to be off
+ *   ([FlashlightShortcut.systemShortcutOn]).
+ * - Screen fully off: Android gives the buttons to no app. They only change the media
+ *   volume, and only while something is playing. So while the screen is off the app plays
+ *   silence, and reads the presses from the volume going up and down ([volumeReceiver]).
  */
 class VolumeKeysService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var torch: Torch
     private lateinit var audio: AudioManager
     private var torchOn = false
-    private var session: MediaSession? = null
-    private var screenOff = false
     private var lastToggle = 0L
 
     // Screen-on state: which buttons are held, and whether this press became the shortcut.
@@ -54,9 +52,16 @@ class VolumeKeysService : AccessibilityService() {
     private var volumesBefore: Map<Int, Int> = emptyMap()
     private var ringerBefore = AudioManager.RINGER_MODE_NORMAL
 
-    // Screen-off state: when each button last reached the media session.
+    // Screen-off state.
+    private var silence: AudioTrack? = null
+    private var listening = false
     private var lastRaise = 0L
     private var lastLower = 0L
+    /** Volume changes the app makes itself are ignored until then. */
+    private var ignoreVolumeUntil = 0L
+    /** The media volume before it was moved off a limit (or -1), and what it was moved to. */
+    private var nudgedFrom = -1
+    private var nudgedTo = -1
 
     private val torchCallback = object : CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
@@ -66,14 +71,18 @@ class VolumeKeysService : AccessibilityService() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            screenOff = intent.action == Intent.ACTION_SCREEN_OFF
-            updateSession()
+            if (intent.action == Intent.ACTION_SCREEN_OFF) startScreenOff() else stopScreenOff()
         }
     }
 
-    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
-        override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>) {
-            updateSession()
+    /** Every volume step, from any app or button; only listened to while the screen is off. */
+    private val volumeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (SystemClock.uptimeMillis() < ignoreVolumeUntil) return
+            val now = intent.getIntExtra(EXTRA_VOLUME, -1)
+            val before = intent.getIntExtra(EXTRA_PREV_VOLUME, -1)
+            if (now < 0 || before < 0 || now == before) return
+            onScreenOffPress(raise = now > before)
         }
     }
 
@@ -95,7 +104,6 @@ class VolumeKeysService : AccessibilityService() {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
-        audio.registerAudioPlaybackCallback(playbackCallback, handler)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -143,6 +151,7 @@ class VolumeKeysService : AccessibilityService() {
     }
 
     private fun undoVolumeChange() {
+        ignoreVolumeUntil = SystemClock.uptimeMillis() + IGNORE_OWN_MS
         volumesBefore.forEach { (stream, volume) ->
             try {
                 if (audio.getStreamVolume(stream) != volume) audio.setStreamVolume(stream, volume, 0)
@@ -157,27 +166,93 @@ class VolumeKeysService : AccessibilityService() {
     }
 
     /**
-     * Holds the silent media session only while the screen is off, the shortcut is on and
-     * nothing else is playing, so the volume buttons keep controlling music and calls.
+     * Screen just went off: play silence so the buttons move the media volume, and listen for
+     * that. A volume at its top or bottom can't move one way, so it is stepped in by one
+     * until the screen comes back on.
      */
-    private fun updateSession() {
-        val want = screenOff && FlashlightShortcut.enabled(this) && torch.available &&
-            !audio.isMusicActive && audio.mode == AudioManager.MODE_NORMAL
-        if (want && session == null) {
-            session = MediaSession(this, "SunriseAlarmFlashlight").apply {
-                setPlaybackToRemote(object : VolumeProvider(VolumeProvider.VOLUME_CONTROL_RELATIVE, 100, 50) {
-                    override fun onAdjustVolume(direction: Int) {
-                        if (direction != 0) onScreenOffPress(raise = direction > 0)
-                    }
-                })
-                setPlaybackState(
-                    PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING, 0L, 0f).build(),
-                )
-                isActive = true
+    private fun startScreenOff() {
+        if (!FlashlightShortcut.enabled(this) || !torch.available || listening) return
+        listening = true
+        lastRaise = 0L
+        lastLower = 0L
+        val stream = AudioManager.STREAM_MUSIC
+        val volume = audio.getStreamVolume(stream)
+        val min = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) audio.getStreamMinVolume(stream) else 0
+        val max = audio.getStreamMaxVolume(stream)
+        val target = when (volume) {
+            max -> max - 1
+            min -> min + 1
+            else -> volume
+        }
+        if (target != volume && min < max) {
+            try {
+                ignoreVolumeUntil = SystemClock.uptimeMillis() + IGNORE_OWN_MS
+                audio.setStreamVolume(stream, target, 0)
+                nudgedFrom = volume
+                nudgedTo = target
+            } catch (e: Exception) {
             }
-        } else if (!want && session != null) {
-            session?.release()
-            session = null
+        }
+        ContextCompat.registerReceiver(
+            this,
+            volumeReceiver,
+            IntentFilter(VOLUME_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        playSilence()
+    }
+
+    private fun stopScreenOff() {
+        if (!listening) return
+        listening = false
+        runCatching { unregisterReceiver(volumeReceiver) }
+        silence?.let { runCatching { it.stop() }; it.release() }
+        silence = null
+        // Put the volume back, unless it was changed on purpose in the meantime.
+        if (nudgedFrom >= 0) {
+            try {
+                if (audio.getStreamVolume(AudioManager.STREAM_MUSIC) == nudgedTo) {
+                    audio.setStreamVolume(AudioManager.STREAM_MUSIC, nudgedFrom, 0)
+                }
+            } catch (e: Exception) {
+            }
+        }
+        nudgedFrom = -1
+        nudgedTo = -1
+    }
+
+    /**
+     * Loops one second of silence. It asks for no audio focus, so it never pauses or ducks
+     * anything; it only makes Android count media as playing.
+     */
+    private fun playSilence() {
+        try {
+            val rate = 8_000
+            val frames = rate
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build(),
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(rate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build(),
+                )
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .setBufferSizeInBytes(frames * 2)
+                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING)
+                .build()
+            track.write(ShortArray(frames), 0, frames)
+            track.setLoopPoints(0, frames, -1)
+            track.play()
+            silence = track
+        } catch (e: Exception) {
+            Log.w("SunriseAlarm", "Could not play silence for the screen-off shortcut", e)
         }
     }
 
@@ -188,6 +263,7 @@ class VolumeKeysService : AccessibilityService() {
         if (abs(lastRaise - lastLower) <= SCREEN_OFF_WINDOW_MS) {
             lastRaise = 0L
             lastLower = 0L
+            // The two steps cancel out, so the volume is already back where it was.
             toggle()
         }
     }
@@ -232,11 +308,9 @@ class VolumeKeysService : AccessibilityService() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        session?.release()
-        session = null
         // Each may never have been registered if the service didn't finish connecting.
+        runCatching { stopScreenOff() }
         runCatching { unregisterReceiver(screenReceiver) }
-        runCatching { audio.unregisterAudioPlaybackCallback(playbackCallback) }
         runCatching { getSystemService(CameraManager::class.java).unregisterTorchCallback(torchCallback) }
         super.onDestroy()
     }
@@ -250,8 +324,15 @@ class VolumeKeysService : AccessibilityService() {
             AudioManager.STREAM_VOICE_CALL,
             AudioManager.STREAM_SYSTEM,
         )
+
+        // AudioManager's volume broadcast; hidden from the SDK but sent on every Android version.
+        private const val VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION"
+        private const val EXTRA_VOLUME = "android.media.EXTRA_VOLUME_STREAM_VALUE"
+        private const val EXTRA_PREV_VOLUME = "android.media.EXTRA_PREV_VOLUME_STREAM_VALUE"
+
         private const val UNDO_DELAY_MS = 150L
-        private const val SCREEN_OFF_WINDOW_MS = 400L
+        private const val SCREEN_OFF_WINDOW_MS = 500L
         private const val COOLDOWN_MS = 700L
+        private const val IGNORE_OWN_MS = 500L
     }
 }

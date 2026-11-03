@@ -18,6 +18,7 @@ object FlashlightShortcut {
     private const val PREFS = "flashlight_shortcut"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_LEVEL = "level"
+    private const val SYSTEM_SHORTCUT = "accessibility_shortcut_target_service"
 
     fun enabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, false)
 
@@ -63,6 +64,30 @@ object FlashlightShortcut {
             true
         } catch (e: Exception) {
             Log.w("SunriseAlarm", "Could not switch on the volume buttons service", e)
+            false
+        }
+    }
+
+    /**
+     * Whether Android's own volume-keys accessibility shortcut (hold both volume buttons to
+     * start TalkBack or another service) is set up. While it is, Android keeps the pair from
+     * every app whenever the phone is unlocked, so the flashlight shortcut can't see them.
+     * Unset means the phone's default (usually TalkBack), so that counts as on. Null when the
+     * phone won't say.
+     */
+    fun systemShortcutOn(context: Context): Boolean? = try {
+        Settings.Secure.getString(context.contentResolver, SYSTEM_SHORTCUT)?.isNotBlank() ?: true
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Clears the volume-keys accessibility shortcut. Needs WRITE_SECURE_SETTINGS. */
+    fun turnSystemShortcutOff(context: Context): Boolean {
+        if (!DisplayFilters.canOverride(context)) return false
+        return try {
+            Settings.Secure.putString(context.contentResolver, SYSTEM_SHORTCUT, "")
+        } catch (e: Exception) {
+            Log.w("SunriseAlarm", "Could not switch off the volume keys accessibility shortcut", e)
             false
         }
     }
