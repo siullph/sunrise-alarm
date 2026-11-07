@@ -327,6 +327,9 @@ fun MainScreen(refresh: Int, onChanged: () -> Unit) {
                 }
             }
 
+            item(key = "extra-dim-title") { SectionTitle("Screen", Modifier.animateItem()) }
+            item(key = "extra-dim") { ExtraDimCard(refresh, onChanged, Modifier.animateItem()) }
+
             item(key = "linked-title") { SectionTitle("Phone alarm", Modifier.animateItem()) }
             item(key = "linked") {
                 LinkedAlarmCard(

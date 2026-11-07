@@ -90,6 +90,38 @@
                 android:resource="@xml/volume_keys_service" />
         </service>
 
+        <!-- Extra dim: the Quick Settings tile, and the overlay for phones without the system one. -->
+        <service
+            android:name=".ExtraDimTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_extra_dim"
+            android:label="@string/extra_dim_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+
+        <service
+            android:name=".ExtraDimService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a dimming overlay on screen while the user has Extra dim switched on" />
+        </service>
+
+        <activity
+            android:name=".ExtraDimToggleActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="com.siullph.sunrisealarm.dim"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".DisplayFilters$RestoreReceiver"
             android:exported="false" />

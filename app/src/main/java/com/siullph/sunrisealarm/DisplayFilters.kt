@@ -87,6 +87,7 @@ object DisplayFilters {
      */
     fun suspend(context: Context, color: Int, until: Long): Int {
         suspendSaturation(context.applicationContext, until)
+        ExtraDim.pauseForSunrise(context)
         val now = status(context)
         if (!canOverride(context)) {
             return if (now.nightLight == true) {
@@ -129,6 +130,7 @@ object DisplayFilters {
     /** Puts back every filter [suspend] switched off. Does nothing if none are waiting. */
     fun restore(context: Context, onDone: () -> Unit = {}) {
         restoreSaturation(context.applicationContext, onDone)
+        ExtraDim.resumeAfterSunrise(context)
         val saved = loadSaved(context) ?: return
         val cr = context.contentResolver
         saved.optJSONObject("night")?.let { night ->

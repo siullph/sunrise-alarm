@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- A small sun with dotted rays, like Android's Extra dim icon. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,9a3,3 0,1 0,0 6a3,3 0,1 0,0 -6zM19.50,10.90a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM17.30,16.20a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM12.00,18.40a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM6.70,16.20a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM4.50,10.90a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM6.70,5.60a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM12.00,3.40a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2zM17.30,5.60a1.1,1.1 0,1 0,0 2.2a1.1,1.1 0,1 0,0 -2.2z" />
+</vector>
