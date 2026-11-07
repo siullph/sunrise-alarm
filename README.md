@@ -74,10 +74,12 @@ starts at its dimmest level and brightens until your wake-up time, like a sunris
 - Without the adb permission above, Night Light dims the screen color. Without Shizuku,
   Bedtime mode's grayscale drains it. Samsung's own Sleep mode grayscale is covered only if One
   UI applies it through the same display saturation as Android's modes; that's untested.
-- With the screen fully off, Android gives the volume buttons to no app, only to whatever is
-  playing media. So the flashlight shortcut holds a silent media session while the screen is
-  off, and only while nothing else is playing; during music or a call, wake the screen first.
-  With the always-on display showing, it works through the accessibility service as usual.
+- With the screen fully off, Android gives the volume buttons to no app; they only change the
+  media volume while something is playing. So while the screen is off the flashlight shortcut
+  plays silence and watches the volume step up and down, which costs a little battery.
+- Android's own volume-keys accessibility shortcut (hold both volume buttons for TalkBack)
+  keeps the pair from every app while the phone is unlocked. The Flashlight card says when it
+  is set up and turns it off (with the Night Light permission) or links to its setting.
 - Apps can't set the display's sunlight (high-brightness) mode directly. Peak brightness uses
   HDR headroom instead, which reaches the same panel range on many phones but not all, and the
   phone may dim it again as it warms up.

@@ -570,6 +570,7 @@ private fun FlashlightCard(
     val context = LocalContext.current
     var enabled by remember(refresh) { mutableStateOf(FlashlightShortcut.enabled(context)) }
     val serviceOn = remember(refresh) { FlashlightShortcut.serviceOn(context) }
+    val systemShortcut = remember(refresh) { FlashlightShortcut.systemShortcutOn(context) }
     var level by remember(refresh) { mutableIntStateOf(FlashlightShortcut.level(context, torch)) }
     var previewing by remember { mutableStateOf(false) }
     // The preview never outlives the card, and stops when switched off.
@@ -648,6 +649,44 @@ private fun FlashlightCard(
             }
         }
 
+        AnimatedVisibility(
+            visible = enabled && serviceOn && systemShortcut != false,
+            enter = expandVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeIn(),
+            exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) + fadeOut(),
+        ) {
+            Column(Modifier.padding(top = 12.dp)) {
+                Text("Free up the volume buttons", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
+                FilterText(
+                    "Android's accessibility shortcut (hold both volume buttons to start " +
+                        "TalkBack) " + (if (systemShortcut == true) "is" else "may be") + " set up. " +
+                        "While it is, Android keeps both buttons to itself whenever the phone is " +
+                        "unlocked, so the flashlight only answers on the lock screen.",
+                )
+                if (canWriteSecure) {
+                    FilledTonalButton(
+                        onClick = {
+                            FlashlightShortcut.turnSystemShortcutOff(context)
+                            onChanged()
+                        },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Turn that shortcut off") }
+                } else {
+                    FilterText(
+                        "To turn it off, open Accessibility settings, then TalkBack (and any other " +
+                            "feature using the volume keys shortcut) and switch its shortcut off. " +
+                            "Granting the Night Light permission (adb or Shizuku) lets the app do " +
+                            "this for you.",
+                        small = true,
+                    )
+                    FilledTonalButton(
+                        onClick = { openSettings(context, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Open settings") }
+                }
+            }
+        }
+
         Spacer(Modifier.height(14.dp))
         if (torch.dimmable) {
             val percent = level * 100 / torch.maxLevel
@@ -704,8 +743,9 @@ private fun FlashlightCard(
             )
         }
         FilterText(
-            "With the screen fully off, the shortcut works while nothing is playing sound; " +
-                "during music or a call, wake the screen first.",
+            "With the screen off, the app quietly keeps the phone's audio running (playing " +
+                "silence) so it can hear the buttons. That uses a little battery while the " +
+                "shortcut is on.",
             small = true,
         )
     }
